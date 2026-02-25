@@ -103,6 +103,7 @@ def save_result_to_csv(template_id, method, language, topic, caption, meme_url, 
                 "language": language,
                 "topic": topic,
                 "caption": caption,
+                "temperature": temperature,
                 "meme_url": meme_url,
                 "clip_score": clip_score if clip_score is not None else "",
                 "crossmodal_incongruity": incongruity_score if incongruity_score is not None else ""
