@@ -50,9 +50,9 @@ except Exception as e:
 # MODEL KONFIGURASI
 # Llama belum bisa melihat gambar secara native (kecuali versi vision), 
 # jadi kita gunakan LLaVA untuk deskripsi gambar.
-MODEL_VLM       = "llama4"           
-# Gunakan Llama untuk generate text caption
-MODEL_LLM       = "llama4" # Ganti ke 'llama4' jika nanti sudah rilis
+MODEL_VLM       = "gemma3"
+# Gunakan Gemma3 untuk generate text caption
+MODEL_LLM       = "gemma3"
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
 # Endpoint API lokal
@@ -61,7 +61,7 @@ MEME_API_CAPTION= f"{MEME_API_BASE}/caption-image"
 HTTP_TIMEOUT    = 20
 
 # ====== CSV LOGGING ======
-RESULTS_CSV_PATH = os.path.join(BASE_DIR, "meme_generation_results.csv")
+RESULTS_CSV_PATH = os.path.join(BASE_DIR, "meme_generation_results_gemma3.csv")
 CSV_COLUMNS = ["run_id", "timestamp", "template_id", "method", "language", "model", "temperature", "topic", "caption", "meme_url", "clip_score", "crossmodal_incongruity"]
 
 def initialize_csv():
@@ -927,7 +927,7 @@ def display_all_prompts():
 # ============================================================
 if __name__ == "__main__":
     # Pastikan server Flask (routes.meme) sudah jalan di http://127.0.0.1:5000
-    # Pastikan di laptop lokal sudah: ollama pull llama4
+    # Pastikan di laptop lokal sudah: ollama pull gemma3
     
     # ========== CONTOH PENGGUNAAN ==========
     # 1. Generate 1 meme dengan zero-shot (bahasa Indonesia, default subtopic pertama)
