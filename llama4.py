@@ -950,7 +950,8 @@ if __name__ == "__main__":
     # - CSV berisi: run_id, timestamp, template_id, method, language, topic, caption, meme_url, clip_score
 
     # ========== CONTOH TEMPLATE IDS ==========
-    result = meme_pipeline_1("00043", topic_key="assignment", language="id")
+    result = meme_pipeline_1("00005", topic_key="lecturer", language="id")
+    result = meme_pipeline_1("00007", topic_key="lecturer", language="id")
     # result = meme_pipeline_few("00043", topic_key="assignment", language="id")
     # result = meme_pipeline_6("00001")
     # Uncomment dan gunakan sesuai kebutuhan

@@ -1,12 +1,12 @@
 import llama4
-import qwen3_vl
+import qwen3_5
 import gemma3
 
 
 def run_templates_001_010_zeroshot_lecturer_all_models(language="id"):
     """
     Jalankan zero-shot untuk topic 'lecturer' pada template 001-010
-    di seluruh model: llama4, qwen3-vl, gemma3.
+    di seluruh model: llama4, qwen3.5, gemma3.
 
     Notes:
     - Template akan dipanggil sebagai 5 digit: 00001 ... 00010
@@ -14,11 +14,11 @@ def run_templates_001_010_zeroshot_lecturer_all_models(language="id"):
     """
     model_runners = [
         ("llama4", llama4.meme_pipeline_1),
-        ("qwen3-vl", qwen3_vl.meme_pipeline_1),
+        ("qwen3.5", qwen3_5.meme_pipeline_1),
         ("gemma3", gemma3.meme_pipeline_1),
     ]
 
-    template_ids = [f"{i:05d}" for i in range(1, 11)]
+    template_ids = [f"{i:05d}" for i in range(1, 7)]
     all_results = {}
 
     for model_name, runner in model_runners:

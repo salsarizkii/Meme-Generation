@@ -2,3 +2,4 @@ cleanmeme/
 generated_memes/
 .env
 meme_generation_results.csv
+csv

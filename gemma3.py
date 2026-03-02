@@ -61,7 +61,7 @@ MEME_API_CAPTION= f"{MEME_API_BASE}/caption-image"
 HTTP_TIMEOUT    = 20
 
 # ====== CSV LOGGING ======
-RESULTS_CSV_PATH = os.path.join(BASE_DIR, "meme_generation_results_gemma3.csv")
+RESULTS_CSV_PATH = os.path.join(BASE_DIR, "meme_generation_results.csv")
 CSV_COLUMNS = ["run_id", "timestamp", "template_id", "method", "language", "model", "temperature", "topic", "caption", "meme_url", "clip_score", "crossmodal_incongruity"]
 
 def initialize_csv():
