@@ -13,12 +13,12 @@ def run_templates_001_010_zeroshot_lecturer_all_models(language="id"):
     - Menggunakan fungsi `meme_pipeline_1` dari masing-masing modul
     """
     model_runners = [
-        ("llama4", llama4.meme_pipeline_1),
+        # ("llama4", llama4.meme_pipeline_1),
         ("qwen3.5", qwen3_5.meme_pipeline_1),
-        ("gemma3", gemma3.meme_pipeline_1),
+        # ("gemma3", gemma3.meme_pipeline_1),
     ]
 
-    template_ids = [f"{i:05d}" for i in range(1, 7)]
+    template_ids = [f"{i:05d}" for i in range(1, 11)]
     all_results = {}
 
     for model_name, runner in model_runners:

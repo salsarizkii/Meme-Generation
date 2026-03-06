@@ -63,7 +63,9 @@ CONTOH CAPTION (FEW-SHOT, SATU BARIS):
 {fewshot_block}
 
 TUGAS: Buat SATU caption meme (satu kalimat saja, tanpa pemisah ||).
-KETENTUAN: Sangat singkat (maks 10 kata), lucu/satir, relatable mahasiswa, relevan dengan deskripsi.
+KETENTUAN: Sangat singkat (maks 7 kata), lucu/satir, relatable mahasiswa, relevan dengan deskripsi.
+WAJIB: Kalimat harus utuh/selesai, tidak terpotong di tengah.
+LARANGAN: Jangan pakai format label/dialog seperti "Subjek: ...", "Dosen: ...", "Mahasiswa: ...", "Me: ...".
 OUTPUT: HANYA SATU BARIS caption, tanpa penjelasan.
 
 Caption baru Anda:""",
@@ -99,7 +101,9 @@ EXAMPLE CAPTIONS (FEW-SHOT, SINGLE LINE):
 {fewshot_block}
 
 TASK: Create ONE meme caption (single sentence, no || separator).
-REQUIREMENTS: Very short (max 10 words), funny/satirical, relatable students, relevant to the description.
+REQUIREMENTS: Very short (max 7 words), funny/satirical, relatable students, relevant to the description.
+MANDATORY: The sentence must be complete, not cut off mid-phrase.
+FORBIDDEN: Do not use speaker/label dialog formats like "Subject: ...", "Lecturer: ...", "Student: ...", or "Me: ...".
 OUTPUT: ONLY ONE LINE caption, without explanation.
 
 Your new caption:""",
@@ -134,7 +138,9 @@ GENERATE_ZEROSHOT_CAPTION_PROMPT = {
         "single_box": """Anda adalah generator caption meme untuk mahasiswa.
 Buat SATU caption meme saja (satu kalimat, tanpa pemisah ||).
 
-Batasan: Sangat singkat (maks 10 kata), lucu/satir/relatable, relevan kehidupan mahasiswa.
+Batasan: Sangat singkat (maks 7 kata), lucu/satir/relatable, relevan kehidupan mahasiswa.
+Wajib: Harus berupa kalimat utuh yang selesai, bukan potongan kalimat.
+Larangan: Jangan gunakan format label/dialog seperti "Subjek: ...", "Dosen: ...", "Mahasiswa: ...", "Me: ...".
 Topik: {topic}
 Fokus humor: {focus}
 
@@ -161,7 +167,9 @@ Deskripsi gambar: "{description}" """
         "single_box": """You are a meme caption generator for university students.
 Create ONE meme caption (single sentence, no || separator).
 
-Constraints: Very short (max 10 words), funny/satirical/relatable, relevant to student life.
+Constraints: Very short (max 7 words), funny/satirical/relatable, relevant to student life.
+Mandatory: Must be a complete sentence, not a cut-off fragment.
+Forbidden: Do not use speaker/label dialog formats like "Subject: ...", "Lecturer: ...", "Student: ...", or "Me: ...".
 Topic: {topic}
 Humor focus: {focus}
 

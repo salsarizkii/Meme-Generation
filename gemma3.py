@@ -11,6 +11,7 @@ from PIL import Image
 from transformers import CLIPProcessor, CLIPModel
 import csv
 from datetime import datetime
+import re
 
 from prompts import (
     FEWSHOT_CAPTIONS,
@@ -50,9 +51,9 @@ except Exception as e:
 # MODEL KONFIGURASI
 # Llama belum bisa melihat gambar secara native (kecuali versi vision), 
 # jadi kita gunakan LLaVA untuk deskripsi gambar.
-MODEL_VLM       = "gemma3"
+MODEL_VLM       = os.getenv("MODEL_VLM", "gemma3:27b")
 # Gunakan Gemma3 untuk generate text caption
-MODEL_LLM       = "gemma3"
+MODEL_LLM       = os.getenv("MODEL_LLM", "gemma3:27b")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
 # Endpoint API lokal
@@ -132,6 +133,49 @@ def make_session():
 session = make_session()
 # Inisialisasi Client Ollama
 client  = ollama.Client(host=OLLAMA_HOST)
+
+
+def _normalize_single_box_caption(text):
+    txt = " ".join(str(text or "").split()).strip()
+    if not txt:
+        return ""
+
+    label_pattern = r"(?:[A-Za-zÀ-ÖØ-öø-ÿ][\wÀ-ÖØ-öø-ÿ-]{0,20}(?:\s+[A-Za-zÀ-ÖØ-öø-ÿ][\wÀ-ÖØ-öø-ÿ-]{0,20}){0,2})\s*:\s*"
+    txt = re.sub(label_pattern, "", txt).strip()
+    txt = " ".join(txt.split())
+
+    max_words = 7
+    dangling_words = {
+        "dan", "atau", "tapi", "yang", "karena", "jadi", "untuk", "dengan",
+        "di", "ke", "dari", "pada", "saat", "ketika", "if", "and", "or",
+        "but", "because", "so", "to", "with", "in", "on", "at", "of", "for"
+    }
+
+    def clean_ending(fragment):
+        fragment = fragment.strip(" ,;:-")
+        parts = fragment.split()
+        while parts and parts[-1].lower() in dangling_words:
+            parts.pop()
+        return " ".join(parts).strip(" ,;:-")
+
+    if not txt:
+        return ""
+
+    sentence_candidates = [clean_ending(s) for s in re.split(r"[.!?]+", txt) if s.strip()]
+    for candidate in sentence_candidates:
+        wc = len(candidate.split())
+        if 1 <= wc <= max_words:
+            return candidate
+
+    clause_candidates = [clean_ending(s) for s in re.split(r"[,;—-]+", txt) if s.strip()]
+    for candidate in clause_candidates:
+        wc = len(candidate.split())
+        if 1 <= wc <= max_words:
+            return candidate
+
+    words = txt.split()
+    fallback = clean_ending(" ".join(words[:max_words]))
+    return fallback if fallback else " ".join(words[:max_words])
 
 # ============================================================
 # CALCULATE CLIP SCORE
@@ -290,7 +334,24 @@ def describe_image_with_ollama(path_or_url, language=None):
 
         return resp['message']['content']
     except Exception as e:
-        return f"[VLM Error] {e} (Pastikan model '{MODEL_VLM}' sudah di-pull)"
+        err = str(e)
+        err_lower = err.lower()
+
+        if "403" in err or "forbidden" in err_lower:
+            return (
+                f"[VLM Error] Akses ke Ollama API ditolak (403) di '{OLLAMA_HOST}'. "
+                "Endpoint '/lab' adalah UI Jupyter, bukan API Ollama. "
+                "Gunakan host API Ollama langsung (contoh: http://<server-ip>:11434) "
+                "dan pastikan port/API diizinkan dari client ini."
+            )
+
+        if "404" in err or "not found" in err_lower:
+            return (
+                f"[VLM Error] Model '{MODEL_VLM}' tidak ditemukan di host '{OLLAMA_HOST}'. "
+                f"Jalankan di server: ollama pull {MODEL_VLM}"
+            )
+
+        return f"[VLM Error] {err} (host={OLLAMA_HOST}, model={MODEL_VLM})"
 
 # ============================================================
 # FEW-SHOT FINAL CAPTION (LLM: LLAMA) — pakai contoh dari prompts.py
@@ -341,6 +402,7 @@ def generate_final_caption(description, topic, focus, box_count=2, topic_key=Non
         txt = txt.replace('"', '').replace("'", "").strip()
 
         if box_count == 1:
+            txt = _normalize_single_box_caption(txt)
             return txt if txt else "caption gagal"
 
         # Multi-box: pastikan jumlah segmen sesuai box_count
@@ -394,6 +456,7 @@ def generate_zeroshot_caption(description, topic, focus, box_count=2, language=N
         txt = txt.replace('"', '').replace("'", "").strip()
 
         if box_count == 1:
+            txt = _normalize_single_box_caption(txt)
             return txt if txt else "caption gagal"
 
         # Multi-box: pecah berdasarkan '||' dan pastikan jumlah segmen
