@@ -49,11 +49,11 @@ except Exception as e:
     clip_processor = None
 
 # MODEL KONFIGURASI
-# Llama belum bisa melihat gambar secara native (kecuali versi vision), 
-# jadi kita gunakan LLaVA untuk deskripsi gambar.
-MODEL_VLM       = os.getenv("MODEL_VLM", "qwen3.5:27b")
-# Gunakan Qwen3-VL untuk generate text caption
-MODEL_LLM       = os.getenv("MODEL_LLM", "qwen3.5:27b")
+# Qwen 3.5 dipakai untuk vision + text sesuai preferensi server.
+MODEL_VLM       = os.getenv("MODEL_VLM", "qwen3.5:latest")
+VLM_FALLBACK    = os.getenv("MODEL_VLM_FALLBACK", "")
+# Gunakan model text untuk generate caption
+MODEL_LLM       = os.getenv("MODEL_LLM", "qwen3.5:latest")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
 # Endpoint API lokal
@@ -63,15 +63,31 @@ HTTP_TIMEOUT    = 20
 
 # ====== CSV LOGGING ======
 RESULTS_CSV_PATH = os.path.join(BASE_DIR, "meme_generation_results.csv")
-CSV_COLUMNS = ["run_id", "timestamp", "template_id", "method", "language", "model", "temperature", "topic", "caption", "meme_url", "clip_score", "crossmodal_incongruity"]
+CSV_COLUMNS = ["run_id", "timestamp", "template_id", "method", "language", "model", "temperature", "topic", "caption", "meme_url", "clip_score", "crossmodal_incongruity", "run_time_seconds"]
 
 def initialize_csv():
-    """Inisialisasi CSV jika belum ada"""
+    """Inisialisasi CSV dan upgrade schema jika perlu."""
     if not os.path.exists(RESULTS_CSV_PATH):
         with open(RESULTS_CSV_PATH, 'w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
             writer.writeheader()
         print(f"[CSV] Created: {RESULTS_CSV_PATH}")
+        return
+
+    # Upgrade file lama: tambahkan kolom baru agar tetap kebaca rapi di Excel.
+    with open(RESULTS_CSV_PATH, 'r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        existing_columns = reader.fieldnames or []
+        if "run_time_seconds" in existing_columns:
+            return
+        rows = list(reader)
+
+    with open(RESULTS_CSV_PATH, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({col: row.get(col, "") for col in CSV_COLUMNS})
+    print(f"[CSV] Upgraded schema with 'run_time_seconds': {RESULTS_CSV_PATH}")
 
 def get_next_run_id():
     """Ambil run_id berikutnya (auto-increment)"""
@@ -88,7 +104,7 @@ def get_next_run_id():
         print(f"[CSV Error] {e}")
         return 1
 
-def save_result_to_csv(template_id, method, language, topic, caption, meme_url, clip_score, incongruity_score, model, temperature):
+def save_result_to_csv(template_id, method, language, topic, caption, meme_url, clip_score, incongruity_score, model, temperature, run_time_seconds=None):
     """Simpan result ke CSV"""
     try:
         initialize_csv()
@@ -109,7 +125,8 @@ def save_result_to_csv(template_id, method, language, topic, caption, meme_url, 
                 "caption": caption,
                 "meme_url": meme_url,
                 "clip_score": clip_score if clip_score is not None else "",
-                "crossmodal_incongruity": incongruity_score if incongruity_score is not None else ""
+                "crossmodal_incongruity": incongruity_score if incongruity_score is not None else "",
+                "run_time_seconds": run_time_seconds if run_time_seconds is not None else ""
             })
         print(f"[CSV] Saved result (run_id={run_id})")
         return run_id
@@ -328,7 +345,7 @@ def describe_image_with_ollama(path_or_url, language=None):
             messages=[{
                 'role': 'user',
                 'content': prompt,
-                'images': [image_bytes]  # Ollama menerima list by tes
+                'images': [image_bytes]  # Ollama menerima list bytes
             }]
         )
 
@@ -336,6 +353,29 @@ def describe_image_with_ollama(path_or_url, language=None):
     except Exception as e:
         err = str(e)
         err_lower = err.lower()
+
+        # Recovery path: jika runner stop/error internal, coba 1x model vision fallback.
+        crash_markers = [
+            "runner has unexpectedly stopped",
+            "status code: 500",
+            "internal error",
+            "context canceled",
+        ]
+        should_retry = any(marker in err_lower for marker in crash_markers)
+        if should_retry and VLM_FALLBACK and VLM_FALLBACK != MODEL_VLM:
+            try:
+                print(f"[VLM Retry] {MODEL_VLM} gagal, coba fallback {VLM_FALLBACK}...")
+                resp = client.chat(
+                    model=VLM_FALLBACK,
+                    messages=[{
+                        'role': 'user',
+                        'content': prompt,
+                        'images': [image_bytes]
+                    }]
+                )
+                return resp['message']['content']
+            except Exception:
+                pass
 
         if "403" in err or "forbidden" in err_lower:
             return (
@@ -618,6 +658,7 @@ def meme_pipeline_1(template_id, topic_key=None, language=None):
     """
     if language is None:
         language = DEFAULT_LANGUAGE
+    start_time = time.time()
 
     template = get_meme_template(template_id)
     if not template:
@@ -673,18 +714,22 @@ def meme_pipeline_1(template_id, topic_key=None, language=None):
     if incongruity_score is not None:
         print(f"[CROSSMODAL INCONGRUITY] {incongruity_score}")
 
+    run_time_seconds = round(time.time() - start_time, 3)
+    print(f"[RUNTIME] {run_time_seconds}s")
+
     # Save to CSV
     
     save_result_to_csv(
         template_id, "zero", language, topic_display, cap_zero, meme_url,
-        clip_score, incongruity_score, MODEL_LLM, LLM_TEMPERATURE
+        clip_score, incongruity_score, MODEL_LLM, LLM_TEMPERATURE, run_time_seconds
     )
 
     return {
         "captions": [cap_zero], 
         "urls": [meme_url],
         "clip_scores": [clip_score],
-        "incongruity_scores": [incongruity_score]
+        "incongruity_scores": [incongruity_score],
+        "run_time_seconds": run_time_seconds
 
     }
 
@@ -698,6 +743,7 @@ def meme_pipeline_few(template_id, topic_key=None, language=None):
     """
     if language is None:
         language = DEFAULT_LANGUAGE
+    start_time = time.time()
 
     template = get_meme_template(template_id)
     if not template:
@@ -743,16 +789,20 @@ def meme_pipeline_few(template_id, topic_key=None, language=None):
     if incongruity_score is not None:
         print(f"[CROSSMODAL INCONGRUITY] {incongruity_score}")
 
+    run_time_seconds = round(time.time() - start_time, 3)
+    print(f"[RUNTIME] {run_time_seconds}s")
+
     save_result_to_csv(
         template_id, "few", language, topic_display, cap_few, meme_url,
-        clip_score, incongruity_score, MODEL_LLM, LLM_TEMPERATURE
+        clip_score, incongruity_score, MODEL_LLM, LLM_TEMPERATURE, run_time_seconds
     )
 
     return {
         "captions": [cap_few],
         "urls": [meme_url],
         "clip_scores": [clip_score],
-        "incongruity_scores": [incongruity_score]
+        "incongruity_scores": [incongruity_score],
+        "run_time_seconds": run_time_seconds
     }
 
 # # ============================================================

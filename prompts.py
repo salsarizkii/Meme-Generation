@@ -64,8 +64,12 @@ CONTOH CAPTION (FEW-SHOT, SATU BARIS):
 
 TUGAS: Buat SATU caption meme (satu kalimat saja, tanpa pemisah ||).
 KETENTUAN: Sangat singkat (maks 7 kata), lucu/satir, relatable mahasiswa, relevan dengan deskripsi.
+WAJIB LUCU: Prioritaskan efek komedi; caption harus punya punchline yang jelas.
+WAJIB NYAMBUNG: Caption harus relate dengan TOPIK dan sesuai isi gambar/template.
+GAYA BAHASA: Pakai bahasa santai/gaul anak kampus, jangan formal.
 WAJIB: Kalimat harus utuh/selesai, tidak terpotong di tengah.
 LARANGAN: Jangan pakai format label/dialog seperti "Subjek: ...", "Dosen: ...", "Mahasiswa: ...", "Me: ...".
+LARANGAN: Jangan gunakan kata "saya" atau "anda".
 OUTPUT: HANYA SATU BARIS caption, tanpa penjelasan.
 
 Caption baru Anda:""",
@@ -85,7 +89,10 @@ teks1 || teks2 || ... || teks{box_count}
 KETENTUAN:
 - Sangat singkat (1-4 kata per box)
 - Lucu/satir/relatable untuk mahasiswa
+- WAJIB terasa lucu dan ada punchline
 - Relevan dengan deskripsi template
+- Gaya bahasa santai/gaul, jangan formal
+- Jangan gunakan kata "saya" atau "anda"
 OUTPUT: HANYA SATU BARIS dengan format di atas, tanpa penjelasan.
 
 Caption baru Anda:"""
@@ -102,6 +109,8 @@ EXAMPLE CAPTIONS (FEW-SHOT, SINGLE LINE):
 
 TASK: Create ONE meme caption (single sentence, no || separator).
 REQUIREMENTS: Very short (max 7 words), funny/satirical, relatable students, relevant to the description.
+MUST BE FUNNY: Prioritize comedic impact and a clear punchline.
+MUST ALIGN: Keep it related to the TOPIC and the image/template content.
 MANDATORY: The sentence must be complete, not cut off mid-phrase.
 FORBIDDEN: Do not use speaker/label dialog formats like "Subject: ...", "Lecturer: ...", "Student: ...", or "Me: ...".
 OUTPUT: ONLY ONE LINE caption, without explanation.
@@ -123,7 +132,9 @@ text1 || text2 || ... || text{box_count}
 REQUIREMENTS:
 - Very short (1-4 words per box)
 - Funny/satirical/relatable for students
+- Must feel funny and include a clear punchline
 - Relevant to the template description
+- Must stay aligned with the TOPIC and image/template content
 OUTPUT: ONLY ONE LINE with format above, without explanation.
 
 Your new caption:"""
@@ -139,8 +150,12 @@ GENERATE_ZEROSHOT_CAPTION_PROMPT = {
 Buat SATU caption meme saja (satu kalimat, tanpa pemisah ||).
 
 Batasan: Sangat singkat (maks 7 kata), lucu/satir/relatable, relevan kehidupan mahasiswa.
+Batasan humor: Wajib lucu, utamakan punchline yang langsung kena.
+Batasan konteks: Wajib relate sama TOPIK dan sesuai isi gambar/template.
+Batasan gaya: Wajib pakai bahasa santai/gaul, jangan formal.
 Wajib: Harus berupa kalimat utuh yang selesai, bukan potongan kalimat.
 Larangan: Jangan gunakan format label/dialog seperti "Subjek: ...", "Dosen: ...", "Mahasiswa: ...", "Me: ...".
+Larangan: Jangan gunakan kata "saya" atau "anda".
 Topik: {topic}
 Fokus humor: {focus}
 
@@ -155,7 +170,11 @@ teks1 || teks2 || ... || teks{box_count}
 Batasan:
 - Sangat singkat (1–4 kata per box)
 - Lucu / satir / relatable
+- Wajib lucu dan ada punchline
 - Relevan dengan kehidupan mahasiswa
+- Harus relate sama TOPIK dan sesuai isi gambar/template
+- Bahasa santai/gaul, jangan formal
+- Jangan gunakan kata "saya" atau "anda"
 - OUTPUT HANYA SATU BARIS dengan pemisah '||'
 
 Topik: {topic}
@@ -168,6 +187,8 @@ Deskripsi gambar: "{description}" """
 Create ONE meme caption (single sentence, no || separator).
 
 Constraints: Very short (max 7 words), funny/satirical/relatable, relevant to student life.
+Humor rule: Must be funny with a clear punchline.
+Context rule: Must stay related to the TOPIC and image/template content.
 Mandatory: Must be a complete sentence, not a cut-off fragment.
 Forbidden: Do not use speaker/label dialog formats like "Subject: ...", "Lecturer: ...", "Student: ...", or "Me: ...".
 Topic: {topic}
@@ -184,7 +205,9 @@ text1 || text2 || ... || text{box_count}
 Constraints:
 - Very short (1-4 words per box)
 - Funny/satirical/relatable
+- Must be funny and include a punchline
 - Relevant to student life
+- Must stay aligned with the TOPIC and image/template content
 - OUTPUT ONLY ONE LINE with '||' separator
 
 Topic: {topic}
