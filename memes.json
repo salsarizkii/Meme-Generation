@@ -401,42 +401,6 @@
     ]
   },
   {
-    "id": "00023",
-    "name": "naik tangga lansung 4",
-    "url_cleanmeme": "/cleanmeme/naik-tangga-lansung-4.png",
-    "width": 1792,
-    "height": 2003,
-    "box_count": 4,
-    "max_font_size": 70,
-    "stroke_width": 5,
-    "box_positions": [
-      {
-        "x": 700,
-        "y": 1600,
-        "width": 700,
-        "height": 250
-      },
-      {
-        "x": 950,
-        "y": 1300,
-        "width": 700,
-        "height": 250
-      },
-      {
-        "x": 1100,
-        "y": 1050,
-        "width": 700,
-        "height": 250
-      },
-      {
-        "x": 1350,
-        "y": 900,
-        "width": 700,
-        "height": 250
-      }
-    ]
-  },
-  {
     "id": "00024",
     "name": "nangis nyanyi",
     "url_cleanmeme": "/cleanmeme/nangis-nyanyi.jpg",

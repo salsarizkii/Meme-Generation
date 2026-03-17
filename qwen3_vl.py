@@ -49,11 +49,10 @@ except Exception as e:
     clip_processor = None
 
 # MODEL KONFIGURASI
-# Llama belum bisa melihat gambar secara native (kecuali versi vision), 
-# jadi kita gunakan LLaVA untuk deskripsi gambar.
-MODEL_VLM       = os.getenv("MODEL_VLM", "gwen3-vl")
+# Qwen3-VL runner memakai Qwen3-VL untuk vision secara default.
+MODEL_VLM       = os.getenv("QWEN3_VL_MODEL_VLM", "qwen3-vl:latest")
 # Gunakan Qwen3-VL untuk generate text caption
-MODEL_LLM       = os.getenv("MODEL_LLM", "qwen3.5:27b")
+MODEL_LLM       = os.getenv("QWEN3_VL_MODEL_LLM", "qwen3-vl:latest")
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
 # Endpoint API lokal
@@ -151,6 +150,9 @@ session = make_session()
 # Inisialisasi Client Ollama
 client  = ollama.Client(host=OLLAMA_HOST)
 
+# Memory ringan antar-run dalam satu proses untuk mengurangi caption sentris.
+RECENT_CAPTIONS_BY_TOPIC = {}
+
 
 def _normalize_single_box_caption(text):
     txt = " ".join(str(text or "").split()).strip()
@@ -161,7 +163,9 @@ def _normalize_single_box_caption(text):
     txt = re.sub(label_pattern, "", txt).strip()
     txt = " ".join(txt.split())
 
-    max_words = 7
+    # Keep aligned with prompt constraints and avoid over-trimming.
+    max_words = 8
+    min_words_preferred = 3
     dangling_words = {
         "dan", "atau", "tapi", "yang", "karena", "jadi", "untuk", "dengan",
         "di", "ke", "dari", "pada", "saat", "ketika", "if", "and", "or",
@@ -179,20 +183,94 @@ def _normalize_single_box_caption(text):
         return ""
 
     sentence_candidates = [clean_ending(s) for s in re.split(r"[.!?]+", txt) if s.strip()]
-    for candidate in sentence_candidates:
-        wc = len(candidate.split())
-        if 1 <= wc <= max_words:
-            return candidate
+    valid_sentence_candidates = [
+        c for c in sentence_candidates if 1 <= len(c.split()) <= max_words
+    ]
+    preferred_sentence_candidates = [
+        c for c in valid_sentence_candidates if len(c.split()) >= min_words_preferred
+    ]
+    if preferred_sentence_candidates:
+        return max(preferred_sentence_candidates, key=lambda c: len(c.split()))
+    if valid_sentence_candidates:
+        return max(valid_sentence_candidates, key=lambda c: len(c.split()))
 
     clause_candidates = [clean_ending(s) for s in re.split(r"[,;—-]+", txt) if s.strip()]
-    for candidate in clause_candidates:
-        wc = len(candidate.split())
-        if 1 <= wc <= max_words:
-            return candidate
+    valid_clause_candidates = [
+        c for c in clause_candidates if 1 <= len(c.split()) <= max_words
+    ]
+    preferred_clause_candidates = [
+        c for c in valid_clause_candidates if len(c.split()) >= min_words_preferred
+    ]
+    if preferred_clause_candidates:
+        return max(preferred_clause_candidates, key=lambda c: len(c.split()))
+    if valid_clause_candidates:
+        return max(valid_clause_candidates, key=lambda c: len(c.split()))
 
     words = txt.split()
     fallback = clean_ending(" ".join(words[:max_words]))
     return fallback if fallback else " ".join(words[:max_words])
+
+
+def _normalize_for_compare(text):
+    txt = str(text or "").lower().strip()
+    txt = re.sub(r"[^a-z0-9\s]", " ", txt)
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt
+
+
+def _is_caption_too_similar(candidate, recent_captions):
+    """Cek apakah caption terlalu mirip dengan history terbaru."""
+    cand_norm = _normalize_for_compare(candidate)
+    if not cand_norm:
+        return False
+
+    cand_tokens = set(cand_norm.split())
+    if not cand_tokens:
+        return False
+
+    for prev in recent_captions:
+        prev_norm = _normalize_for_compare(prev)
+        if not prev_norm:
+            continue
+
+        if cand_norm == prev_norm:
+            return True
+
+        prev_tokens = set(prev_norm.split())
+        if not prev_tokens:
+            continue
+
+        overlap = len(cand_tokens & prev_tokens) / max(1, len(cand_tokens | prev_tokens))
+        if overlap >= 0.5:
+            return True
+
+    return False
+
+
+def _extract_visual_anchor(description):
+    """Ambil kata kunci visual dari deskripsi gambar agar caption lebih nempel ke template."""
+    txt = str(description or "").lower()
+    keyword_groups = [
+        ["kermit", "drake", "patrick", "spongebob", "jerry", "flork"],
+        ["panik", "bingung", "pasrah", "senyum", "nangis", "ketawa", "kaget", "marah"],
+        ["laptop", "hp", "papan", "rumus", "kelas", "kursi", "chat", "notif"],
+    ]
+
+    for group in keyword_groups:
+        for kw in group:
+            if kw in txt:
+                return kw
+
+    tokens = [t for t in re.findall(r"[a-zA-Z0-9]+", txt) if len(t) >= 4]
+    return tokens[0] if tokens else "ekspresi"
+
+
+def _caption_mentions_anchor(caption, anchor):
+    cap_norm = _normalize_for_compare(caption)
+    anc_norm = _normalize_for_compare(anchor)
+    if not cap_norm or not anc_norm:
+        return True
+    return anc_norm in cap_norm
 
 # ============================================================
 # CALCULATE CLIP SCORE
@@ -279,22 +357,6 @@ def calculate_crossmodal_incongruity(clip_score):
     return round(incongruity, 4)
 
 
-# ======== SUBTOPICS ========
-SUBTOPICS = {
-    "thesis": {
-        "topic": "Thesis Life",
-        "focus": "revisi tanpa akhir, dosen pembimbing sulit ditemui, burnout, data error"
-    },
-    "lecturer": {
-        "topic": "Lecturer / Pembelajaran",
-        "focus": "dosen killer, kelas membosankan, kuis mendadak, materi sulit"
-    },
-    "assignment": {
-        "topic": "Assignment",
-        "focus": "tugas menumpuk, begadang, submit terlambat, kerja kelompok toxic"
-    }
-}
-
 # ============================================================
 # GET MEME TEMPLATE (via API lokal /get_memes)
 # ============================================================
@@ -373,7 +435,7 @@ def describe_image_with_ollama(path_or_url, language=None):
 # ============================================================
 # FEW-SHOT FINAL CAPTION (LLM: LLAMA) — pakai contoh dari prompts.py
 # ============================================================
-def generate_final_caption(description, topic, focus, box_count=2, topic_key=None, language=None):
+def generate_final_caption(description, topic, box_count=2, topic_key=None, language=None):
     """
     Generate caption final dengan few-shot dari prompts.py.
     - box_count == 1  -> satu caption (tanpa '||')
@@ -382,30 +444,32 @@ def generate_final_caption(description, topic, focus, box_count=2, topic_key=Non
     if language is None:
         language = DEFAULT_LANGUAGE
     
-    fewshots_raw = (FEWSHOT_CAPTIONS.get(topic_key or "thesis") or FEWSHOT_CAPTIONS["thesis"]).get(language, [])
-    # Ambil hanya teks caption dari struktur dict
-    base_captions = [item.get("caption", "") for item in fewshots_raw]
+    topic_data = (FEWSHOT_CAPTIONS.get(topic_key or "thesis") or FEWSHOT_CAPTIONS["thesis"]).get(language, {})
+    format_key = "single" if box_count == 1 else "multi"
+    fewshots_raw = topic_data.get(format_key, [])
 
     if box_count == 1:
-        # Contoh satu caption: gabung "A || B" -> "A B"
-        fewshot_block = "\n".join(
-            c.replace(" || ", " ").strip() for c in base_captions if c.strip()
+        # Format: "Template: <desc>\nCaption: <cap tanpa ||>"
+        fewshot_block = "\n\n".join(
+            f'Template: {item.get("description", "-")}\nCaption: {item.get("caption", "").strip()}'
+            for item in fewshots_raw if item.get("caption", "").strip()
         )
         prompt_template = GENERATE_FINAL_CAPTION_PROMPT.get(language, GENERATE_FINAL_CAPTION_PROMPT["id"])
         prompt = prompt_template["single_box"].format(
             description=description,
             topic=topic,
-            focus=focus,
             fewshot_block=fewshot_block
         )
     else:
-        # Contoh multi-box
-        fewshot_block = "\n".join(c for c in base_captions if c.strip())
+        # Format: "Template: <desc>\nCaption: <cap dengan ||>"
+        fewshot_block = "\n\n".join(
+            f'Template: {item.get("description", "-")}\nCaption: {item.get("caption", "")}'
+            for item in fewshots_raw if item.get("caption", "").strip()
+        )
         prompt_template = GENERATE_FINAL_CAPTION_PROMPT.get(language, GENERATE_FINAL_CAPTION_PROMPT["id"])
         prompt = prompt_template["multi_box"].format(
             description=description,
             topic=topic,
-            focus=focus,
             box_count=box_count,
             fewshot_block=fewshot_block
         )
@@ -413,7 +477,12 @@ def generate_final_caption(description, topic, focus, box_count=2, topic_key=Non
     try:
         resp = client.chat(
             model=MODEL_LLM,
-            messages=[{'role': 'user', 'content': prompt}]
+            messages=[{'role': 'user', 'content': prompt}],
+            options={
+                "temperature": LLM_TEMPERATURE,
+                "top_p": 0.9,
+                "repeat_penalty": 1.1,
+            }
         )
         txt = resp['message']['content'].replace("\n", " ").strip()
         txt = txt.replace('"', '').replace("'", "").strip()
@@ -439,7 +508,7 @@ def generate_final_caption(description, topic, focus, box_count=2, topic_key=Non
 # ============================================================
 # ZERO-SHOT (LLM: LLAMA)
 # ============================================================
-def generate_zeroshot_caption(description, topic, focus, box_count=2, language=None):
+def generate_zeroshot_caption(description, topic, box_count=2, language=None):
     """
     Zero-shot caption:
     - box_count == 1  -> satu caption (tanpa '||')
@@ -453,21 +522,24 @@ def generate_zeroshot_caption(description, topic, focus, box_count=2, language=N
     if box_count == 1:
         prompt = prompt_template["single_box"].format(
             topic=topic,
-            focus=focus,
             description=description
         )
     else:
         prompt = prompt_template["multi_box"].format(
             box_count=box_count,
             topic=topic,
-            focus=focus,
             description=description
         )
 
     try:
         resp = client.chat(
             model=MODEL_LLM,
-            messages=[{'role': 'user', 'content': prompt}]
+            messages=[{'role': 'user', 'content': prompt}],
+            options={
+                "temperature": LLM_TEMPERATURE,
+                "top_p": 0.9,
+                "repeat_penalty": 1.1,
+            }
         )
         txt = resp['message']['content'].replace("\n", " ").strip()
         txt = txt.replace('"', '').replace("'", "").strip()
@@ -652,27 +724,13 @@ def meme_pipeline_1(template_id, topic_key=None, language=None):
     # Print full VLM result
     print(f"[VLM RESULT]\n{desc}\n")
 
-    # Pilih subtopic
-    if topic_key is None:
-        # Default: pakai subtopic pertama
-        topic_key = list(SUBTOPICS.keys())[0]
-    
-    if topic_key not in SUBTOPICS:
-        print(f"[WARNING] Topic key '{topic_key}' tidak ditemukan. Pakai default.")
-        topic_key = list(SUBTOPICS.keys())[0]
-    
-    topic = SUBTOPICS[topic_key]["topic"]
-    focus = SUBTOPICS[topic_key]["focus"]
+    topic = str(topic_key).strip() if topic_key else "general"
     box_count = int(template.get("box_count", 2))
 
-    # Jika bahasa Indonesia dan topic_key adalah 'thesis', ganti kata 'Thesis' -> 'Skripsi'
-    topic_display = topic
-    if topic_key == "thesis" and language == "id":
-        topic_display = topic.replace("Thesis", "Skripsi")
+    print(f"=== TOPIC: {topic} (box_count={box_count}) ===")
 
-    print(f"=== SUBTOPIC: {topic_display} (box_count={box_count}) ===")
-    # Generate zero-shot caption (pakai topic_display)
-    cap_zero = generate_zeroshot_caption(desc, topic_display, focus, box_count, language=language)
+    cap_zero = generate_zeroshot_caption(desc, topic, box_count, language=language)
+
     # cap_zero = "nyoba api llalLllLALA hehe ini masi nyoba huehuehueh"
     meme_url, _ = create_meme(template_id, cap_zero, method="zero", language=language)
 
@@ -697,7 +755,7 @@ def meme_pipeline_1(template_id, topic_key=None, language=None):
     # Save to CSV
     
     save_result_to_csv(
-        template_id, "zero", language, topic_display, cap_zero, meme_url,
+        template_id, "zero", language, topic, cap_zero, meme_url,
         clip_score, incongruity_score, MODEL_LLM, LLM_TEMPERATURE, run_time_seconds
     )
 
@@ -707,7 +765,6 @@ def meme_pipeline_1(template_id, topic_key=None, language=None):
         "clip_scores": [clip_score],
         "incongruity_scores": [incongruity_score],
         "run_time_seconds": run_time_seconds
-
     }
 
 # ============================================================
@@ -735,23 +792,11 @@ def meme_pipeline_few(template_id, topic_key=None, language=None):
     # Print full VLM result
     print(f"[VLM RESULT]\n{desc}\n")
 
-    if topic_key is None:
-        topic_key = list(SUBTOPICS.keys())[0]
-    if topic_key not in SUBTOPICS:
-        print(f"[WARNING] Topic key '{topic_key}' tidak ditemukan. Pakai default.")
-        topic_key = list(SUBTOPICS.keys())[0]
-
-    topic = SUBTOPICS[topic_key]["topic"]
-    focus = SUBTOPICS[topic_key]["focus"]
+    topic = str(topic_key).strip() if topic_key else "thesis"
     box_count = int(template.get("box_count", 2))
 
-    # Jika bahasa Indonesia dan topic_key adalah 'thesis', ganti kata 'Thesis' -> 'Skripsi'
-    topic_display = topic
-    if topic_key == "thesis" and language == "id":
-        topic_display = topic.replace("Thesis", "Skripsi")
-
-    print(f"=== SUBTOPIC: {topic_display} (box_count={box_count}) ===")
-    cap_few = generate_final_caption(desc, topic_display, focus, box_count, topic_key=topic_key, language=language)
+    print(f"=== TOPIC: {topic} (box_count={box_count}) ===")
+    cap_few = generate_final_caption(desc, topic, box_count, topic_key=topic_key, language=language)
     meme_url, _ = create_meme(template_id, cap_few, method="few", language=language)
 
     clip_score = None
@@ -770,7 +815,7 @@ def meme_pipeline_few(template_id, topic_key=None, language=None):
     print(f"[RUNTIME] {run_time_seconds}s")
 
     save_result_to_csv(
-        template_id, "few", language, topic_display, cap_few, meme_url,
+        template_id, "few", language, topic, cap_few, meme_url,
         clip_score, incongruity_score, MODEL_LLM, LLM_TEMPERATURE, run_time_seconds
     )
 
