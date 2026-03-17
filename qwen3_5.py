@@ -49,11 +49,9 @@ except Exception as e:
     clip_processor = None
 
 # MODEL KONFIGURASI
-# Qwen 3.5 runner memakai Qwen 3.5 untuk vision + text secara default.
-MODEL_VLM       = os.getenv("QWEN3_5_MODEL_VLM", "qwen3.5:latest")
-VLM_FALLBACK    = os.getenv("QWEN3_5_MODEL_VLM_FALLBACK", "")
-# Gunakan model text untuk generate caption
-MODEL_LLM       = os.getenv("QWEN3_5_MODEL_LLM", "qwen3.5:latest")
+# Prioritas env var khusus Qwen3.5; tetap support fallback legacy LLAMA4_* untuk kompatibilitas.
+MODEL_VLM       = os.getenv("QWEN3_5_MODEL_VLM", os.getenv("LLAMA4_MODEL_VLM", "qwen3.5:latest"))
+MODEL_LLM       = os.getenv("QWEN3_5_MODEL_LLM", os.getenv("LLAMA4_MODEL_LLM", "qwen3.5:latest"))
 LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.7"))
 
 # Endpoint API lokal
@@ -408,7 +406,7 @@ def describe_image_with_ollama(path_or_url, language=None):
             messages=[{
                 'role': 'user',
                 'content': prompt,
-                'images': [image_bytes]  # Ollama menerima list bytes
+                'images': [image_bytes]  # Ollama menerima list by tes
             }]
         )
 
@@ -416,29 +414,6 @@ def describe_image_with_ollama(path_or_url, language=None):
     except Exception as e:
         err = str(e)
         err_lower = err.lower()
-
-        # Recovery path: jika runner stop/error internal, coba 1x model vision fallback.
-        crash_markers = [
-            "runner has unexpectedly stopped",
-            "status code: 500",
-            "internal error",
-            "context canceled",
-        ]
-        should_retry = any(marker in err_lower for marker in crash_markers)
-        if should_retry and VLM_FALLBACK and VLM_FALLBACK != MODEL_VLM:
-            try:
-                print(f"[VLM Retry] {MODEL_VLM} gagal, coba fallback {VLM_FALLBACK}...")
-                resp = client.chat(
-                    model=VLM_FALLBACK,
-                    messages=[{
-                        'role': 'user',
-                        'content': prompt,
-                        'images': [image_bytes]
-                    }]
-                )
-                return resp['message']['content']
-            except Exception:
-                pass
 
         if "403" in err or "forbidden" in err_lower:
             return (
@@ -712,15 +687,16 @@ def create_meme(template_id, caption, method=None, language=None):
 # ============================================================
 # PIPELINE 1 MEME (ZERO-SHOT ONLY)
 # ============================================================
-def meme_pipeline_1(template_id, topic_key=None, language=None):
+def meme_pipeline_1(template_id, topic_key=None, language=None, model_name=None, temperature=None):
     """
     Generate 1 meme menggunakan zero-shot approach.
     
     Args:
         template_id: ID template meme
-        topic_key: Key subtopic (optional). Jika None, akan pakai subtopic pertama.
-                   Pilihan: "thesis", "lecturer", "assignment"
+        topic_key: Key subtopic (optional). Pilihan: "thesis", "lecturer", "assignment"
         language: Bahasa untuk prompt (optional). Pilihan: "id", "en". Default dari DEFAULT_LANGUAGE.
+        model_name: Override model tag, contoh: "qwen3.5:latest"
+        temperature: Override temperature, contoh: 0.7
     
     Returns:
         {
@@ -729,6 +705,12 @@ def meme_pipeline_1(template_id, topic_key=None, language=None):
             "clip_scores": [score]
         }
     """
+    global MODEL_LLM, MODEL_VLM, LLM_TEMPERATURE
+    if model_name is not None:
+        MODEL_LLM = model_name
+        MODEL_VLM = model_name
+    if temperature is not None:
+        LLM_TEMPERATURE = temperature
     if language is None:
         language = DEFAULT_LANGUAGE
     start_time = time.time()
@@ -794,11 +776,24 @@ def meme_pipeline_1(template_id, topic_key=None, language=None):
 # ============================================================
 # PIPELINE FEW-SHOT (SINGLE MEME)
 # ============================================================
-def meme_pipeline_few(template_id, topic_key=None, language=None):
+def meme_pipeline_few(template_id, topic_key=None, language=None, model_name=None, temperature=None):
     """
     Generate 1 meme using few-shot approach (examples from prompts.py).
     Returns same structure as meme_pipeline_1.
+
+    Args:
+        template_id: ID template meme
+        topic_key: Key subtopic (optional). Pilihan: "thesis", "lecturer", "assignment"
+        language: Bahasa untuk prompt (optional). Pilihan: "id", "en". Default dari DEFAULT_LANGUAGE.
+        model_name: Override model tag, contoh: "qwen3.5:latest"
+        temperature: Override temperature, contoh: 0.7
     """
+    global MODEL_LLM, MODEL_VLM, LLM_TEMPERATURE
+    if model_name is not None:
+        MODEL_LLM = model_name
+        MODEL_VLM = model_name
+    if temperature is not None:
+        LLM_TEMPERATURE = temperature
     if language is None:
         language = DEFAULT_LANGUAGE
     start_time = time.time()
@@ -1086,30 +1081,34 @@ def display_all_prompts():
 # ============================================================
 if __name__ == "__main__":
     # Pastikan server Flask (routes.meme) sudah jalan di http://127.0.0.1:5000
-    # Pastikan di laptop lokal sudah: ollama pull qwen3-vl
-    
-    # ========== CONTOH PENGGUNAAN ==========
-    # 1. Generate 1 meme dengan zero-shot (bahasa Indonesia, default subtopic pertama)
-    # result = meme_pipeline_1("00001")
-    
-    # 2. Generate 1 meme dengan zero-shot (bahasa Inggris, subtopic tertentu)
-    # result = meme_pipeline_1("00001", topic_key="thesis", language="en")
-    
-    # 3. Generate 6 meme (bahasa Indonesia) - hasil disimpan ke CSV otomatis
-    # result = meme_pipeline_6("00001", language="id")
-    
-    # 4. Generate 6 meme (bahasa Inggris) - hasil disimpan ke CSV otomatis
-    # result = meme_pipeline_6("00001", language="en")
+    # Semua hasil disimpan otomatis ke meme_generation_results.csv
 
-    # ========== NOTES ==========
-    # - Semua hasil generate akan disimpan ke meme_generation_results.csv
-    # - Nama file gambar: {template_id}_{method}_{language}.png
-    # - method: "zero" atau "few"
-    # - language: "id" atau "en"
-    # - CSV berisi: run_id, timestamp, template_id, method, language, topic, caption, meme_url, clip_score
+    import itertools
 
-    # ========== CONTOH TEMPLATE IDS ==========
-    result = meme_pipeline_1("00043", topic_key="assignment", language="id")
-    # result = meme_pipeline_few("00043", topic_key="assignment", language="id")
-    # result = meme_pipeline_6("00001")
-    # Uncomment dan gunakan sesuai kebutuhan
+    # ========== KONFIGURASI RUN ==========
+    MODEL_NAME  = "qwen3.5:latest"
+    TEMPLATES   = [f"{i:05d}" for i in range(1, 52)]          # 00001 - 00050
+    TOPICS      = ["thesis", "lecturer", "assignment"]          # 3 topik
+    LANGUAGES   = ["id", "en"]                                  # 2 bahasa
+    TEMPERATURES = [0.3, 0.7]                                   # 2 suhu
+    # Total: 50 x 2 metode x 3 topik x 2 bahasa x 2 suhu = 1200 konfigurasi
+
+    for template_id, topic, language, temperature in itertools.product(
+        TEMPLATES, TOPICS, LANGUAGES, TEMPERATURES
+    ):
+        # Zero-shot
+        result = meme_pipeline_1(
+            template_id,
+            topic_key=topic,
+            language=language,
+            model_name=MODEL_NAME,
+            temperature=temperature,
+        )
+        # Few-shot
+        result = meme_pipeline_few(
+            template_id,
+            topic_key=topic,
+            language=language,
+            model_name=MODEL_NAME,
+            temperature=temperature,
+        )

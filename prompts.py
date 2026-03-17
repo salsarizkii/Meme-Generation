@@ -282,7 +282,7 @@ FEWSHOT_CAPTIONS = {
                 },
                 {
                     "description": "mahasiswa membaca ulang kalimat skripsinya sendiri tapi tetap tidak paham maksudnya",
-                    "caption": "pov gapaham sama apa yang lo tulis di skripsi"
+                    "caption": "pov gapaham sama apa yang lo tulis di tugas akhir"
                 },
                 {
                     "description": "mahasiswa menemukan satu jurnal yang sangat relevan setelah berjam-jam mencari",
@@ -296,7 +296,7 @@ FEWSHOT_CAPTIONS = {
             "multi": [
                 {
                     "description": "mahasiswa burnout menatap layar laptop malam hari, skripsi gak maju-maju",
-                    "caption": "skripsi jalan || mental tertinggal"
+                    "caption": "tugas akhir jalan || mental tertinggal"
                 },
                 {
                     "description": "mahasiswa buka laptop mau bimbingan, padahal baru buka file-nya sekarang",
@@ -328,7 +328,7 @@ FEWSHOT_CAPTIONS = {
                 },
                 {
                     "description": "student rereading their own thesis sentence but still not understanding it",
-                    "caption": "POV: not understanding your own thesis writing"
+                    "caption": "POV: not understanding your own tugas akhir writing"
                 },
                 {
                     "description": "student finally found a very relevant journal after searching for hours",
@@ -342,7 +342,7 @@ FEWSHOT_CAPTIONS = {
             "multi": [
                 {
                     "description": "burned-out student staring at laptop at night, thesis not moving",
-                    "caption": "thesis moves || mental left behind"
+                    "caption": "tugas akhir moves || mental left behind"
                 },
                 {
                     "description": "student opening laptop for supervision, but only opening the file now",
